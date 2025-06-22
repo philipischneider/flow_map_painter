@@ -285,6 +285,9 @@ def paint_a_dot(context, area_type, mouse_position, event, location=None):
     else:
         return None
 
+    if brush is None:
+        return
+
     # pressure and dynamic pen pressure
     pressure = bpy.context.scene.tool_settings.unified_paint_settings.use_unified_strength
     if brush.use_pressure_strength is True:
