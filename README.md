@@ -1,3 +1,5 @@
+# DEPRECATED IN BLENDER VERSION 5.0.0! (I am working on a refactor)
+
 # Flow Map Painter [Blender]
 
 This blender add-on provides a brush tool for flow map painting.
