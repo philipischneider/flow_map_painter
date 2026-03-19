@@ -20,8 +20,8 @@
 bl_info = {
     "name": "Flow Map Painter",
     "author": "Clemens Beute <feedback.clemensbeute@gmail.com>",
-    "version": (1, 5),
-    "blender": (4, 4, 3),
+    "version": (1, 6),
+    "blender": (5, 0, 0),
     "category": "Paint",
     "location": "Paint Brush Tool Panel",
     "description": "A brush tool for flow map painting. The brush gets the color of the painting direction",
@@ -89,11 +89,11 @@ def draw_interface(self, context, mode):
 
     # paint
     if mode == '2D_PAINT':
-        self.layout.operator("flowmap.flow_map_paint_two_d", text="Flowmap 2D Paint Mode", icon='ANIM_DATA')
+        self.layout.operator("flowmap.flow_map_paint_two_d", text="Flowmap 2D Paint Mode", icon='BRUSH_DATA')
     if mode == '3D_PAINT':
-        self.layout.operator("flowmap.flow_map_paint_three_d", text="Flowmap 3D Paint Mode", icon='ANIM_DATA')
+        self.layout.operator("flowmap.flow_map_paint_three_d", text="Flowmap 3D Paint Mode", icon='BRUSH_DATA')
     if mode == 'VERTEX_PAINT':
-        self.layout.operator("flowmap.flow_map_paint_vcol", text="Flowmap Vertex Paint Mode", icon='ANIM_DATA')
+        self.layout.operator("flowmap.flow_map_paint_vcol", text="Flowmap Vertex Paint Mode", icon='BRUSH_DATA')
 
     self.layout.separator()
 
@@ -102,9 +102,12 @@ class FLOWMAP_PT_FLOW_MAP_PAINT_2D(bpy.types.Panel):
 
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Tool"
+    bl_category = "Flowmap"
     bl_label = "2D Flowmap Paint"
-    bl_context = ".imagepaint_2d"
+
+    @classmethod
+    def poll(cls, context):
+        return context.area.type == 'IMAGE_EDITOR'
 
     def draw(self, context):
         draw_interface(self, context, mode='2D_PAINT')
@@ -115,14 +118,12 @@ class FLOWMAP_PT_FLOW_MAP_PAINT_3D(bpy.types.Panel):
 
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Tool"
+    bl_category = "Flowmap"
     bl_label = "3D Flowmap Paint"
-    bl_context = "imagepaint"
 
     @classmethod
-    def poll(self, context):
-        """Poll Return defines, when to display the Class (Dont show flowmap painter in Properties)"""
-        return context.area.type == "VIEW_3D"
+    def poll(cls, context):
+        return context.area.type == 'VIEW_3D'
 
     def draw(self, context):
         draw_interface(self, context, mode='3D_PAINT')
@@ -133,14 +134,12 @@ class FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL(bpy.types.Panel):
 
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Tool"
+    bl_category = "Flowmap"
     bl_label = "3D Flowmap Vertex Paint"
-    bl_context = "vertexpaint"
 
     @classmethod
-    def poll(self, context):
-        """Poll Return defines, when to display the Class (Dont show flowmap painter in Properties)"""
-        return context.area.type == "VIEW_3D"
+    def poll(cls, context):
+        return context.area.type == 'VIEW_3D'
 
     def draw(self, context):
         draw_interface(self, context, mode='VERTEX_PAINT')
@@ -149,37 +148,47 @@ class FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL(bpy.types.Panel):
 
 def register():
 
-    # PROPS
-    bpy.utils.register_class(FlowmapPainterProperties)
+    classes = [
+        FlowmapPainterProperties,
+        FLOWMAP_OT_FLOW_MAP_PAINT_2D,
+        FLOWMAP_OT_FLOW_MAP_PAINT_3D,
+        FLOWMAP_OT_FLOW_MAP_PAINT_VERTCOL,
+        FLOWMAP_PT_FLOW_MAP_PAINT_2D,
+        FLOWMAP_PT_FLOW_MAP_PAINT_3D,
+        FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL,
+    ]
+
+    for cls in classes:
+        try:
+            bpy.utils.register_class(cls)
+        except Exception as e:
+            print(f"[Flow Map Painter] Failed to register {cls.__name__}: {e}")
+            raise
+
     bpy.types.Scene.flowmap_painter_props = bpy.props.PointerProperty(type=FlowmapPainterProperties)
-
-    # OPERATORS
-    bpy.utils.register_class(FLOWMAP_OT_FLOW_MAP_PAINT_2D)
-    bpy.utils.register_class(FLOWMAP_OT_FLOW_MAP_PAINT_3D)
-    bpy.utils.register_class(FLOWMAP_OT_FLOW_MAP_PAINT_VERTCOL)
-
-    # PANELS
-    bpy.utils.register_class(FLOWMAP_PT_FLOW_MAP_PAINT_2D)
-    bpy.utils.register_class(FLOWMAP_PT_FLOW_MAP_PAINT_3D)
-    bpy.utils.register_class(FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL)
 
     return None
 
 
 def unregister():
 
-    # PROPS
-    del bpy.types.Scene.flowmap_painter_props
-    bpy.utils.unregister_class(FlowmapPainterProperties)
+    classes = [
+        FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL,
+        FLOWMAP_PT_FLOW_MAP_PAINT_3D,
+        FLOWMAP_PT_FLOW_MAP_PAINT_2D,
+        FLOWMAP_OT_FLOW_MAP_PAINT_VERTCOL,
+        FLOWMAP_OT_FLOW_MAP_PAINT_3D,
+        FLOWMAP_OT_FLOW_MAP_PAINT_2D,
+        FlowmapPainterProperties,
+    ]
 
-    # OPERATORS
-    bpy.utils.unregister_class(FLOWMAP_OT_FLOW_MAP_PAINT_2D)
-    bpy.utils.unregister_class(FLOWMAP_OT_FLOW_MAP_PAINT_3D)
-    bpy.utils.unregister_class(FLOWMAP_OT_FLOW_MAP_PAINT_VERTCOL)
+    if hasattr(bpy.types.Scene, "flowmap_painter_props"):
+        del bpy.types.Scene.flowmap_painter_props
 
-    # PANELS
-    bpy.utils.unregister_class(FLOWMAP_PT_FLOW_MAP_PAINT_2D)
-    bpy.utils.unregister_class(FLOWMAP_PT_FLOW_MAP_PAINT_3D)
-    bpy.utils.unregister_class(FLOWMAP_PT_FLOW_MAP_PAINT_VERTCOL)
+    for cls in classes:
+        try:
+            bpy.utils.unregister_class(cls)
+        except Exception as e:
+            print(f"[Flow Map Painter] Failed to unregister {cls.__name__}: {e}")
 
     return None

@@ -53,7 +53,7 @@ class FlowmapPainterProperties(bpy.types.PropertyGroup):
             "object_space",
             "Object Space",
             "Use it, if you want to transform your material Object Coordinates. If empty, current object is used. No UV Map needed in Vertex Paint",
-            'OBJECT_DATAMODE',
+            'OBJECT_DATA',
             1,
         ),
         (
@@ -69,7 +69,7 @@ class FlowmapPainterProperties(bpy.types.PropertyGroup):
         name="space type",
         description="Which space type is used for the direction color?",
         items=space_type_items,
-        default=0
+        default="uv_space"
     )
 
     object: bpy.props.PointerProperty(

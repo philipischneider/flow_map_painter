@@ -1,0 +1,13 @@
+schema_version = "1.0.0"
+
+id = "flow_map_painter"
+version = "1.6.0"
+name = "Flow Map Painter"
+tagline = "Brush tool for flow map painting - brush color matches painting direction"
+maintainer = "Clemens Beute <feedback.clemensbeute@gmail.com>"
+type = "add-on"
+
+blender_version_min = "5.0.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Paint"]

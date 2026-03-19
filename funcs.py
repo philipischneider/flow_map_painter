@@ -20,10 +20,82 @@
 import bpy
 import numpy
 import mathutils
+import gpu
+import math
 from bpy_extras import view3d_utils
-from gpu_extras.presets import draw_circle_2d
+from gpu_extras.batch import batch_for_shader
 
 from . import vars
+
+
+def draw_circle_2d_compat(position, color, radius, segments=32):
+    """Draw a 2D circle using the GPU module (replaces removed gpu_extras.presets.draw_circle_2d)"""
+    coords = []
+    for i in range(segments + 1):
+        angle = 2 * math.pi * i / segments
+        x = position[0] + radius * math.cos(angle)
+        y = position[1] + radius * math.sin(angle)
+        coords.append((x, y))
+    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+    batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": coords})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
+
+
+def get_active_brush():
+    """Get the active brush for the current paint mode"""
+    ts = bpy.context.tool_settings
+    if vars.mode == 'VERTEX_PAINT':
+        return ts.vertex_paint.brush
+    elif vars.mode in ('2D_PAINT', '3D_PAINT'):
+        return ts.image_paint.brush
+    return None
+
+
+def _get_paint_settings():
+    """Get the paint settings for the current paint mode (Blender 5.0+).
+    In Blender 5.0, unified_paint_settings moved from tool_settings to each paint mode."""
+    ts = bpy.context.tool_settings
+    if vars.mode == 'VERTEX_PAINT':
+        return getattr(ts.vertex_paint, 'unified_paint_settings', None)
+    elif vars.mode in ('2D_PAINT', '3D_PAINT'):
+        return getattr(ts.image_paint, 'unified_paint_settings', None)
+    return None
+
+
+def get_paint_color():
+    """Get the current paint brush color"""
+    ups = _get_paint_settings()
+    if ups is not None and hasattr(ups, 'color'):
+        return ups.color
+    brush = get_active_brush()
+    if brush is not None:
+        return brush.color
+    return (0.5, 0.5, 0.5)
+
+
+def set_paint_color(color):
+    """Set the current paint brush color"""
+    # Set on unified_paint_settings (Blender 5.0+ reads color from here)
+    ups = _get_paint_settings()
+    if ups is not None and hasattr(ups, 'color'):
+        ups.color = color
+    # Also set on brush for visual feedback and compatibility
+    brush = get_active_brush()
+    if brush is not None:
+        brush.color = color
+
+
+def get_paint_size():
+    """Get the current paint brush size"""
+    ups = _get_paint_settings()
+    if ups is not None and hasattr(ups, 'size'):
+        return ups.size
+    brush = get_active_brush()
+    if brush is not None:
+        return brush.size
+    return 50
 
 
 def lerp(mix, a, b):
@@ -289,13 +361,13 @@ def paint_a_dot(context, area_type, mouse_position, event, location=None):
         return
 
     # pressure and dynamic pen pressure
-    pressure = bpy.context.scene.tool_settings.unified_paint_settings.use_unified_strength
-    if brush.use_pressure_strength is True:
+    pressure = brush.strength
+    if getattr(brush, 'use_pressure_strength', False) is True:
         pressure = pressure * event.pressure
 
     # size and dynamic pen pressure size
-    size = bpy.context.scene.tool_settings.unified_paint_settings.size
-    if brush.use_pressure_size is True:
+    size = brush.size
+    if getattr(brush, 'use_pressure_size', False) is True:
         size = size * event.pressure
 
     if location is None:
@@ -333,7 +405,7 @@ def modal_paint_three_d(self, context, event):
 
     context.area.tag_redraw()
 
-    # this is necessary, to find out if left mouse is pressed down (so no other keypress ist taken into account to trigger painting)
+    # track left mouse press state
     if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
         # set first position of stroke
         self.furthest_position = numpy.array([event.mouse_x, event.mouse_y])
@@ -354,7 +426,7 @@ def modal_paint_three_d(self, context, event):
         area_pos = (mouse_position[0] - area_position_x, mouse_position[1] - area_position_y)
         area_prev_pos = (self.mouse_prev_position[0] - area_position_x, self.mouse_prev_position[1] - area_position_y)
 
-        # if mouse has traveled enough distance and mouse is pressed, get color, draw a dot
+        # if mouse has traveled enough distance, update color and paint
         distance = numpy.linalg.norm(self.furthest_position - mouse_position)
         if distance >= bpy.context.scene.flowmap_painter_props.brush_spacing:
             # reset threshold
@@ -370,10 +442,10 @@ def modal_paint_three_d(self, context, event):
             elif bpy.context.scene.flowmap_painter_props.space_type == "world_space":
                 direction_color, location = get_world_space_direction_color(context, area_pos, area_prev_pos)
 
-            # set paint brush color, but check for nan first (fucked value, when direction didnt work)
-            if not direction_color is None:
+            # set paint brush color, but check for nan first
+            if direction_color is not None:
                 if not any(numpy.isnan(val) for val in direction_color):
-                    bpy.context.scene.tool_settings.unified_paint_settings.color = direction_color
+                    set_paint_color(direction_color)
 
             if vars.pressing:
                 # paint the actual dots with the selected brush spacing
@@ -381,10 +453,8 @@ def modal_paint_three_d(self, context, event):
                 substeps_float = distance / bpy.context.scene.flowmap_painter_props.brush_spacing
                 substeps_int = int(substeps_float)
                 if distance > 2 * bpy.context.scene.flowmap_painter_props.brush_spacing:
-                    # substep_count = substeps_int
                     substep_count = substeps_int
                     while substep_count > 0:
-                        # lerp_mix = 1 / (substeps_int + 1) * substep_count
                         lerp_mix = 1 / (substeps_int) * substep_count
                         lerp_paint_position = numpy.array(
                             [
@@ -418,19 +488,19 @@ def modal_paint_three_d(self, context, event):
         # draw circle
         def draw():
             pos = vars.circle_pos
-            brush_col = bpy.context.scene.tool_settings.unified_paint_settings.color
+            brush_col = get_paint_color()
             col = (brush_col[0], brush_col[1], brush_col[2], 1)
-            size = bpy.context.scene.tool_settings.unified_paint_settings.size
+            size = get_paint_size()
 
-            draw_circle_2d(pos, col, size)
+            draw_circle_2d_compat(pos, col, size)
 
         vars.circle = bpy.types.SpaceView3D.draw_handler_add(draw, (), 'WINDOW', 'POST_PIXEL')
 
         return {'RUNNING_MODAL'}
 
     if event.type == 'ESC':
-        # clean brush color from nan shit
-        bpy.context.scene.tool_settings.unified_paint_settings.color = (0.5, 0.5, 0.5)
+        # reset brush color
+        set_paint_color((0.5, 0.5, 0.5))
         # remove circle
         if vars.circle:
             bpy.types.SpaceView3D.draw_handler_remove(vars.circle, 'WINDOW')
